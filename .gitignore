@@ -1,0 +1,18 @@
+# 秘密鍵・証明書
+key.pem
+cert.pem
+
+# OS・エディタ系
+.DS_Store
+Thumbs.db
+*.swp
+
+# Python系キャッシュ
+__pycache__/
+*.pyc
+.venv/
+
+# 動画や大きいファイル（必要なら）
+*.mp4
+*.mov
+*.avi

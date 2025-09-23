@@ -1,0 +1,26 @@
+# Flask Web Framework
+flask
+werkzeug
+
+# Task Queue
+celery
+redis
+
+# Production Web Server
+gunicorn
+
+# Video/Audio Processing
+pydub
+pysubs2
+
+# ML/AI Models & numerics
+faster-whisper
+speechbrain
+torchaudio
+scikit-learn
+numpy
+scipy
+torch # speechbrain, torchaudio, faster-whisperが依存
+
+# Utilities
+pillow

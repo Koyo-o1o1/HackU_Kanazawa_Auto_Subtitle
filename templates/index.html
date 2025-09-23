@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字幕生成</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/daisyui@latest/dist/full.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&family=M+PLUS+Rounded+1c:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Nunito', 'M PLUS Rounded 1c',sans-serif;
+        }
+        h1 {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+        }
+        .button {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animate-gradient {
+            background-size: 200% 200%;
+            animation: gradientShift 8s ease infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-blue-200">
+    <div class="container text-center px-4 py-8">
+        <div class="card max-w-3xl mx-auto p-6 md:p-12 bg-white rounded-xl shadow-lg">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Washa-Wake</h1>
+            <p class="text-lg text-gray-400 mb-8">動画をアップロードして、話者分離した字幕を付けましょう。</p>
+            
+            <form id="uploadForm" class="flex flex-col items-center space-y-4">
+                <div class="flex items-center gap-3">
+                  <label for="speakers" class="text-sm text-gray-600">話者数</label>
+                  <input
+                    type="number" id="speakers" name="speakers"
+                    min="1" max="12" value="2"
+                    class="w-24 px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring"
+                  />
+                </div>
+
+                <input type="file" id="videoFile" name="video" accept="video/*" class="mx-auto block text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-violet-50 file:text-violet-700
+                    hover:file:bg-violet-100 cursor-pointer" />
+                <button type="submit" id="uploadButton" class="bg-gradient-to-r from-pink-500 to-yellow-400 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition hover:scale-110 hover:rotate-1">
+                    アップロード
+                </button>
+            </form>
+
+            <div id="status" class="mt-8 hidden flex flex-col items-center justify-center space-y-4">
+                <div class="flex space-x-2">
+                    <span class="w-4 h-4 bg-pink-300 rounded-full animate-bounce"></span>
+                    <span class="w-4 h-4 bg-yellow-300 rounded-full animate-bounce [animation-delay:-.3s]"></span>
+                    <span class="w-4 h-4 bg-sky-300 rounded-full animate-bounce [animation-delay:-.6s]"></span>
+                </div>
+                <p class="text-lg font-bold text-gray-600" id="statusMessage">字幕を生成中です...</p>
+            </div>
+
+            <div id="result" class="mt-8" hidden>
+                <div class="bg-green-200 border-l-4 border-green-500 text-green-800 p-4 rounded-lg flex items-center gap-2">
+                    <span>処理が完了しました！</span>
+                </div>
+                <div class="mt-4 flex flex-col items-center">
+                    <video id="finalVideoPlayer" controls class="w-full rounded-lg shadow-lg mb-4"></video>
+                    <a id="downloadLink" href="#" download="final_video.mp4" class="button inline-block bg-blue-500 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition-colors">
+                        動画をダウンロード
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const uploadForm = document.getElementById('uploadForm');
+        const videoFile = document.getElementById('videoFile');
+        const speakersInput = document.getElementById('speakers');
+        const uploadButton = document.getElementById('uploadButton');
+        const statusDiv = document.getElementById('status');
+        const statusMessage = document.getElementById('statusMessage');
+        const resultDiv = document.getElementById('result');
+        const finalVideoPlayer = document.getElementById('finalVideoPlayer');
+        const downloadLink = document.getElementById('downloadLink');
+
+        const FLASK_ENDPOINT = '/upload';
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const file = videoFile.files[0];
+            if (!file) {
+                return showModal('動画ファイルを選択してください。');
+            }
+
+            uploadButton.disabled = true;
+            uploadButton.textContent = 'アップロード中...';
+            statusDiv.classList.remove('hidden');
+            resultDiv.classList.add('hidden');
+            statusMessage.textContent = '動画を処理中です...';
+
+            const formData = new FormData();
+            formData.append('video', file, file.name);
+            formData.append('file',  file, file.name);
+
+            const k = parseInt(speakersInput.value || '2', 10);
+            formData.append('speakers', isNaN(k) ? '2' : String(k));
+
+            try {
+                const response = await fetch(FLASK_ENDPOINT, {
+                    method: 'POST',
+                    body: formData,
+                    redirect: 'follow',
+                    credentials: 'same-origin'
+                });
+
+                const ctype = (response.headers.get('content-type') || '').toLowerCase();
+
+                if (response.ok && ctype.startsWith('video/')) {
+                    const blob = await response.blob();
+                    const videoUrl = URL.createObjectURL(blob);
+                    finalVideoPlayer.src = videoUrl;
+                    downloadLink.href = videoUrl;
+                    downloadLink.download = `final_${file.name}`;
+                    statusDiv.classList.add('hidden');
+                    resultDiv.classList.remove('hidden');
+                    return;
+                }
+
+                if (response.redirected || ctype.includes('text/html')) {
+                    window.location.href = response.url;
+                    return;
+                }
+                
+                if (ctype.includes('application/json')) {
+                    const data = await response.json();
+                    const directUrl = data.url || data.file_url;
+                    if (directUrl) {
+                        finalVideoPlayer.src = directUrl;
+                        downloadLink.href = directUrl;
+                    } else if (data.file_id) {
+                        const streamUrl = `/video/${data.file_id}`;
+                        finalVideoPlayer.src = streamUrl;
+                        downloadLink.href = streamUrl;
+                    } else {
+                        throw new Error('JSON レスポンスの形式が想定外です。');
+                    }
+                    downloadLink.download = `final_${file.name}`;
+                    statusDiv.classList.add('hidden');
+                    resultDiv.classList.remove('hidden');
+                    return;
+                }
+
+                throw new Error(`サーバーの応答形式に対応していません: ${ctype}`);
+
+            } catch (err) {
+                console.error(err);
+                statusDiv.classList.add('hidden');
+                showModal('エラーが発生しました。もう一度お試しください。');
+            } finally {
+                uploadButton.disabled = false;
+                uploadButton.textContent = 'アップロード';
+            }
+        });
+
+        function showModal(message) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50';
+            modal.innerHTML = `
+            <div class="bg-white p-8 rounded-lg shadow-xl text-center">
+                <p class="text-xl mb-4">${message}</p>
+                <button onclick="this.closest('.fixed').remove()" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600">OK</button>
+            </div>`;
+            document.body.appendChild(modal);
+        }
+    });
+    </script>
+</body>
+</html>
